@@ -1,0 +1,209 @@
+const express = require("express");
+const router = express.Router();
+const User = require("../models/user");
+const Users = require('../operations/useroperation');
+const BlogUsers = require("../operations/blogoperation");
+const passport = require('passport');
+const jwt = require('jsonwebtoken');
+const config = require('../config/database');
+const nodemail = require('../config/nodemails')
+
+router.post('/home', (req, res, next) => {
+  pageNo = req.body.pageNo;
+  console.log(req.body.pageNo);
+  BlogUsers.findAllByType((err, docs) => {
+    if (err)
+      throw err
+    else {
+      BlogUsers.findByType(pageNo, (err, blogs) => {
+        if (err)
+          throw err
+        else {
+          res.json({
+            totalPage: docs.length / 2,
+            data: blogs
+          })
+        }
+      })
+    }
+  })
+})
+
+router.post('/register', (req, res, next) => {
+  var { name, email, password, gender } = req.body;
+  let newUser = new User({
+    name, email, password, gender
+  })
+  Users.addUser(newUser, (err, user) => {
+    if (err)
+      res.json({ success: false, msg: 'failed to register user', error: err })
+    else
+      res.json({ success: true, msg: 'user registered' })
+  })
+});
+
+router.post('/forgetpassword', (req, res, next) => {
+  var email = req.body.email;
+  Users.getUserByUserName(email, (err, user) => {
+    if (err)
+      throw err
+    else if (user !== null) {
+      nodemail.nodeMail(email, (err, info) => {
+        if (err)
+          throw err
+        else
+          res.json({ status: true })
+      })
+    }
+    else {
+      console.log(user)
+      return res.json({ success: false, msg: 'User not found' })
+    }
+  })
+});
+
+router.post('/auth', (req, res, next) => {
+  var { email, password } = req.body;
+
+  Users.getUserByUserName(email, (err, user) => {
+    if (err)
+      throw err
+    if (!user)
+      return res.json({ success: false, msg: 'User not found' })
+
+    Users.comparePassword(password, user.password, (err, isMatch) => {
+      if (err)
+        throw err;
+      if (isMatch) {
+        const token = jwt.sign(user.toJSON(), config.secret, { expiresIn: '2h' });
+        var { id, name, email, role } = user;
+        res.json({
+          status: true,
+          token: token,
+          user: { id, name, email, role }
+        })
+      }
+      else
+        return res.json({ status: true, msg: 'Incorrect Password' })
+    })
+  })
+});
+
+router.get('/profile', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  res.json(req.user)
+});
+
+router.post('/dashboard', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  pageNo = req.body.pageNo;
+  BlogUsers.findAllByType((err, docs) => {
+    if (err)
+      throw err
+    else {
+      BlogUsers.findByType(pageNo, (err, blogs) => {
+        if (err)
+          throw err
+        else {
+          res.json({
+            totalPage: docs.length / 2,
+            data: blogs,
+            myBlogsId: req.user.blog,
+            role: req.user.role
+          })
+        }
+      })
+    }
+  })
+});
+
+router.post('/changePassword', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var { email, opassword, npassword } = req.body;
+
+  Users.getUserByUserName(email, (err, user) => {
+    if (err)
+      throw err
+    if (!user) {
+      console.log(user)
+      return res.json({ success: false, msg: 'User not found' })
+    }
+    Users.comparePassword(opassword, user.password, (err, isMatch) => {
+      if (err)
+        throw err;
+      if (isMatch) {
+        console.log('isMatch');
+        Users.updatePassword(user.email, npassword, (err, docs) => {
+          if (err)
+            throw err
+          else
+            res.json({ msg: "Updated" })
+        })
+      }
+      else {
+        return res.json({ status: true, msg: 'Incorrect Password' })
+      }
+    })
+  })
+});
+
+router.post('/create-blog', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  email = req.user.email;
+  data = req.body;
+  BlogUsers.createBlog(data, (err, docs) => {
+    if (err)
+      throw err;
+    else
+      Users.addIdCreateBlog(email, docs, (err, docs) => {
+        if (err)
+          throw err
+        else
+          res.json('true');
+      })
+  })
+})
+
+router.post('/editBlog/:id', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var blogId = req.body.id;
+  BlogUsers.findByBlogId(blogId, (err, docs) => {
+    if (err)
+      throw err
+    else
+      res.json(docs)
+  })
+})
+
+router.post('/deleteBlog', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  email = req.user.email;
+  blogId = req.body.blog;
+  BlogUsers.deleteBlog(blogId, (err, docs) => {
+    if (err)
+      throw err
+    else
+      Users.deleteBlog(email, blogId, (err, docs) => {
+        if (err)
+          throw err
+        else
+          res.json({ "status": true })
+      })
+  })
+})
+
+router.post('/updateblog', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  data = req.body;
+  BlogUsers.updateBlog(data, (err, docs) => {
+    if (err)
+      throw err
+    else
+      res.json({ status: "running.." })
+  });
+})
+
+router.get('/myblog', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  email = req.user.email;
+  Users.showMyBlog(email, (err, docs) => {
+    if (err)
+      console.log(err)
+    else
+      res.json(docs[0].blog);
+  })
+})
+
+module.exports = router;
