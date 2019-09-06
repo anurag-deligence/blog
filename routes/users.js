@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require("../models/user");
 const Users = require('../operations/useroperation');
 const BlogUsers = require("../operations/blogoperation");
+const Comments = require("../operations/commentoperation")
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const config = require('../config/database');
@@ -14,18 +15,16 @@ router.post('/home', (req, res, next) => {
   BlogUsers.findAllByType((err, docs) => {
     if (err)
       throw err
-    else {
+    else
       BlogUsers.findByType(pageNo, (err, blogs) => {
         if (err)
           throw err
-        else {
+        else
           res.json({
             totalPage: docs.length / 2,
             data: blogs
           })
-        }
       })
-    }
   })
 })
 
@@ -98,20 +97,21 @@ router.post('/dashboard', passport.authenticate('jwt', { session: false }), (req
   BlogUsers.findAllByType((err, docs) => {
     if (err)
       throw err
-    else {
-      BlogUsers.findByType(pageNo, (err, blogs) => {
+    else
+      BlogUsers.findByType(pageNo, async (err, blogs) => {
         if (err)
           throw err
-        else {
-          res.json({
-            totalPage: docs.length / 2,
-            data: blogs,
-            myBlogsId: req.user.blog,
-            role: req.user.role
-          })
-        }
+        else
+          var result = await Comments.findComments(blogs);
+        console.log("array", result);
+        res.json({
+          comments: result,
+          totalPage: docs.length / 2,
+          data: blogs,
+          myBlogsId: req.user.blog,
+          role: req.user.role
+        })
       })
-    }
   })
 });
 
@@ -121,25 +121,21 @@ router.post('/changePassword', passport.authenticate('jwt', { session: false }),
   Users.getUserByUserName(email, (err, user) => {
     if (err)
       throw err
-    if (!user) {
-      console.log(user)
+    if (!user)
       return res.json({ success: false, msg: 'User not found' })
-    }
+
     Users.comparePassword(opassword, user.password, (err, isMatch) => {
       if (err)
         throw err;
-      if (isMatch) {
-        console.log('isMatch');
+      if (isMatch)
         Users.updatePassword(user.email, npassword, (err, docs) => {
           if (err)
             throw err
           else
             res.json({ msg: "Updated" })
         })
-      }
-      else {
+      else
         return res.json({ status: true, msg: 'Incorrect Password' })
-      }
     })
   })
 });
@@ -203,6 +199,33 @@ router.get('/myblog', passport.authenticate('jwt', { session: false }), (req, re
       console.log(err)
     else
       res.json(docs[0].blog);
+  })
+})
+
+router.post('/comments', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var { blogId, userComments } = req.body;
+  details = {
+    email: req.user.email, userComments, blogId
+  }
+  Comments.comments(details.blogId, (err, docs) => {
+    if (err)
+      console.log(err)
+    else if (docs) {
+      Comments.updateComments(details, (err, docs) => {
+        if (err)
+          throw err
+        else
+          res.json("done");
+      })
+    }
+    else {
+      Comments.addComments(details, (err, docs) => {
+        if (err)
+          throw err
+        else
+          res.json("done");
+      })
+    }
   })
 })
 
