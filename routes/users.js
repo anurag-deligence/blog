@@ -7,7 +7,8 @@ const Comments = require("../operations/commentoperation")
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const config = require('../config/database');
-const nodemail = require('../config/nodemails')
+const nodemail = require('../config/nodemails');
+const async = require("async");
 
 router.post('/home', (req, res, next) => {
   pageNo = req.body.pageNo;
@@ -103,7 +104,6 @@ router.post('/dashboard', passport.authenticate('jwt', { session: false }), (req
           throw err
         else
           var result = await Comments.findComments(blogs);
-        console.log("array", result);
         res.json({
           comments: result,
           totalPage: docs.length / 2,
@@ -161,8 +161,11 @@ router.post('/editBlog/:id', passport.authenticate('jwt', { session: false }), (
   BlogUsers.findByBlogId(blogId, (err, docs) => {
     if (err)
       throw err
-    else
+    else {
+      console.log("docs", docs);
       res.json(docs)
+    }
+
   })
 })
 
@@ -202,31 +205,62 @@ router.get('/myblog', passport.authenticate('jwt', { session: false }), (req, re
   })
 })
 
-router.post('/comments', passport.authenticate('jwt', { session: false }), (req, res, next) => {
-  var { blogId, userComments } = req.body;
-  details = {
-    email: req.user.email, userComments, blogId
-  }
-  Comments.comments(details.blogId, (err, docs) => {
+router.post('/comments/:blogId', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var blogId = req.body.blogId;
+
+  async.parallel([
+    (callback) => {
+      BlogUsers.findByBlogId(blogId, (err, docs) => {
+        callback(err, docs)
+      })
+    },
+    (callback) => {
+      Comments.comments(blogId, (err, data) => {
+        if (data)
+          callback(err, data.comments)
+        else
+          callback(err, null)
+      })
+    }
+  ], (err, result) => {
+    res.json(result)
+  })
+})
+
+router.post('/addComments', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var { userComments, blogId } = req.body;
+  details = { email: req.user.email, userComments, blogId }
+  Comments.comments(details.blogId, async (err, docs) => {
     if (err)
-      console.log(err)
-    else if (docs) {
+      throw err
+    else if (docs)
       Comments.updateComments(details, (err, docs) => {
         if (err)
           throw err
         else
-          res.json("done");
+          res.json(docs)
       })
-    }
-    else {
+    else
       Comments.addComments(details, (err, docs) => {
         if (err)
           throw err
         else
-          res.json("done");
+          res.json(docs)
       })
-    }
   })
 })
 
+router.post('/deleteComment', passport.authenticate('jwt', { session: false }), (req, res, next) => {
+  var { comment, id } = req.body
+  Comments.deleteComment(comment, id, (err, docs) => {
+    if (err)
+      throw err
+    else
+      res.json('done');
+  })
+})
+
+
 module.exports = router;
+
+

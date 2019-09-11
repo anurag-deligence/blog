@@ -13,7 +13,7 @@ module.exports.createBlog = (data, callback) => {
 
 module.exports.findByBlogId = (blogId, callback) => {
   var blogId = { "_id": mongoose.Types.ObjectId(blogId) };
-  BlogUser.find(blogId, callback)
+  BlogUser.findOne(blogId, callback)
 }
 
 module.exports.deleteBlog = (blogId, callback) => {

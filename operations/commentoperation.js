@@ -30,3 +30,9 @@ module.exports.findComments = async (blogs) => {
     });
   return commentsArray;
 }
+
+module.exports.deleteComment = (comment, id, callback) => {
+  var blogId = { blogId: mongoose.Types.ObjectId(id) };
+  var data = { $pull: { comments: { comment: comment } } };
+  Comment.findOneAndUpdate(blogId, data, callback);
+}
